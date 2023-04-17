@@ -4,21 +4,26 @@ import {DataInterface} from "../interfaces/DataInterface";
 import {DataClassInterface} from "../interfaces/DataClassInterface";
 import {CacheExpiration} from "../enums/CacheExpiration";
 import {Pluraliser} from "../utils/Pluraliser";
-import {api} from "../init";
+import {Minimalism} from "../Minimalism";
 
 export abstract class AbstractData implements DataInterface{
     private _type: string;
     private _id: string|undefined;
 
     protected _data: any;
+    protected _included?: any[];
     protected _children: Map<DataClassInterface<any, any>, DataInterface|DataInterface[]> = new Map<DataClassInterface<any, any>, DataInterface[]>();
 
     constructor(type: string) {
         this._type = type;
     }
 
-    importData(data: any): void {
+    importData(
+        data: any,
+        includedData?: any[],
+    ): void {
         this._data = data;
+        this._included = includedData;
         this._type = data.type;
         this._id = data.id;
     }
@@ -45,6 +50,10 @@ export abstract class AbstractData implements DataInterface{
 
     get data(): any {
         return this._data;
+    }
+
+    get included(): any[] | undefined {
+        return this._included;
     }
 
     get type(): string{
@@ -98,6 +107,9 @@ export abstract class AbstractData implements DataInterface{
         type: DataClassInterface<T, Routes>,
         maxResults?: number
     ): Promise<T[]> {
+        if (this._children.has(type))
+            return this._children.get(type) as T[];
+
         return this._getRelatedList(type, undefined, maxResults)
             .then((list: T[]) => {
                 this._children.set(type, list);
@@ -109,10 +121,8 @@ export abstract class AbstractData implements DataInterface{
     protected async _getChild<T extends DataInterface, Routes>(
         type: DataClassInterface<T, Routes>
     ): Promise<T> {
-        const response = this._children.get(type);
-
-        if (response !== undefined)
-            return response as T;
+        if (this._children.has(type))
+            return this._children.get(type) as T;
 
         return this._getRelatedSingle(type)
             .then((child: T) => {
@@ -149,7 +159,7 @@ export abstract class AbstractData implements DataInterface{
             throw new Error(className.name + ' missing');
 
         // const response = await this._api.getSingle(className, undefined, url, cache ?? className.cacheExpiration);
-        const response: T = await api.getSingle(className, url.split('/').pop() ?? "", url, cache ?? className.cacheExpiration);
+        const response: T = await Minimalism.api.getSingle(className, url.split('/').pop() ?? "", url, cache ?? className.cacheExpiration);
 
         if (response === undefined)
             throw new Error(className.name + ' missing');
@@ -171,7 +181,7 @@ export abstract class AbstractData implements DataInterface{
         if (url === undefined)
             throw new Error(Pluraliser.plural(className.name) + ' missing');
 
-        return api.getList(className, url, cache ?? className.cacheExpiration, maxResults);
+        return Minimalism.api.getList(className, url, cache ?? className.cacheExpiration, maxResults);
     }
 
     async loadSpecificRelationships(

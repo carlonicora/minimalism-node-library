@@ -2,6 +2,7 @@ import {ApiCacheInterface} from "../interfaces/ApiCacheInterface";
 import {ApiCacheElementInterface} from "../interfaces/ApiCacheElementInterface";
 import {ApiCachedElementKeyInterface} from "../interfaces/ApiCachedElementKeyInterface";
 import {ApiCacheElements} from "./ApiCacheElements";
+import {ApiDataInterface} from "../interfaces/ApiDataInterface";
 
 export class ApiCache implements ApiCacheInterface {
     private _dbPromise: Promise<IDBDatabase>;
@@ -12,28 +13,32 @@ export class ApiCache implements ApiCacheInterface {
     }
 
     private _openDatabase(objectStore: string): Promise<IDBDatabase> {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('only35', 1);
+        if (typeof window !== "undefined") {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('only35', 1);
 
-            request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-                const db = (event.target as IDBOpenDBRequest).result;
+                request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
 
-                // Create 'lists' object store if they don't exist
-                for (const objectStoreName of this._objectStoreNames) {
-                    if (!db.objectStoreNames.contains(objectStoreName)) {
-                        db.createObjectStore(objectStoreName, { keyPath: 'key' });
+                    // Create 'lists' object store if they don't exist
+                    for (const objectStoreName of this._objectStoreNames) {
+                        if (!db.objectStoreNames.contains(objectStoreName)) {
+                            db.createObjectStore(objectStoreName, { keyPath: 'key' });
+                        }
                     }
-                }
-            };
+                };
 
-            request.onsuccess = (event: Event) => {
-                resolve((event.target as IDBOpenDBRequest).result);
-            };
+                request.onsuccess = (event: Event) => {
+                    resolve((event.target as IDBOpenDBRequest).result);
+                };
 
-            request.onerror = (event: Event) => {
-                reject((event.target as IDBOpenDBRequest).error);
-            };
-        });
+                request.onerror = (event: Event) => {
+                    reject((event.target as IDBOpenDBRequest).error);
+                };
+            });
+        } else {
+            throw new Error("indexedDB not available on the server");
+        }
     }
 
     private async _getCacheElement(
@@ -58,29 +63,29 @@ export class ApiCache implements ApiCacheInterface {
         return Promise.resolve(undefined);
     }
 
-    async getElement(key: ApiCachedElementKeyInterface): Promise<any | undefined> {
+    async getElement(key: ApiCachedElementKeyInterface): Promise<ApiDataInterface | undefined> {
         const cache: ApiCacheElementInterface = await this._getCacheElement("elements");
         return cache.get(key);
     }
 
-    async getList(key: string): Promise<any[] | undefined> {
+    async getList(key: string): Promise<ApiDataInterface[] | undefined> {
         const cache: ApiCacheElementInterface = await this._getCacheElement("lists");
 
         const responseKeys: any[]|undefined = await cache.get({id: key, type: 'lists'});
 
         if (!responseKeys) return undefined;
 
-        const responsePromises: Promise<any>[]  = responseKeys.map(async (responseKey: ApiCachedElementKeyInterface) => {
+        const responsePromises: Promise<ApiDataInterface>[]  = responseKeys.map(async (responseKey: ApiCachedElementKeyInterface) => {
             const cache: ApiCacheElementInterface = await this._getCacheElement("elements");
             return cache.get(responseKey);
         });
 
-        const response = await Promise.all(responsePromises);
+        const response: ApiDataInterface[] = await Promise.all(responsePromises);
 
         return response;
     }
 
-    async addList(key: string, list: any[], ttl: number): Promise<void> {
+    async addList(key: string, list: any[], ttl: number, included?: any): Promise<void> {
         const elementKeys: ApiCachedElementKeyInterface[] = [];
         for (const element of list) {
             const elementKey: ApiCachedElementKeyInterface = {
@@ -90,7 +95,11 @@ export class ApiCache implements ApiCacheInterface {
             elementKeys.push(elementKey);
 
             const elementCache: ApiCacheElementInterface = await this._getCacheElement("elements");
-            await elementCache.set(elementKey, element, ttl);
+            const fullElement: ApiDataInterface = {
+                data: element,
+                included: included,
+            };
+            await elementCache.set(elementKey, fullElement, ttl);
         }
 
         // Save the list of keys in the 'lists' storage.
@@ -111,9 +120,13 @@ export class ApiCache implements ApiCacheInterface {
         }
     }
 
-    async addElement(key: ApiCachedElementKeyInterface, element: any, ttl: number): Promise<void> {
+    async addElement(key: ApiCachedElementKeyInterface, element: any, ttl: number, included?: any[]): Promise<void> {
         const elementCache: ApiCacheElementInterface = await this._getCacheElement("elements");
-        await elementCache.set(key, element, ttl);
+        const fullElement: ApiDataInterface = {
+            data: element,
+            included: included,
+        };
+        await elementCache.set(key, fullElement, ttl);
     }
 
     async removeElement(key: ApiCachedElementKeyInterface): Promise<void> {
@@ -141,7 +154,7 @@ export class ApiCache implements ApiCacheInterface {
         await elementCache.delete(key);
     }
 
-    async addNewElementToList(listKey: string, element: any, ttl: number): Promise<void> {
+    async addNewElementToList(listKey: string, element: any, ttl: number, included?: any[]): Promise<void> {
         // Add the new element to the list.
         const elementKey: ApiCachedElementKeyInterface = {
             id: element.id,
@@ -160,7 +173,11 @@ export class ApiCache implements ApiCacheInterface {
 
         // Save the new element in its respective object store.
         const elementCache: ApiCacheElementInterface = await this._getCacheElement("elements");
-        await elementCache.set(elementKey, element, ttl);
+        const fullElement: ApiDataInterface = {
+            data: element,
+            included: included,
+        };
+        await elementCache.set(elementKey, fullElement, ttl);
 
         // Create a new index+type for the element containing the list.
         const indexCache: ApiCacheElementInterface = await this._getCacheElement("indexes");

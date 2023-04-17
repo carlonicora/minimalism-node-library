@@ -1,9 +1,11 @@
 import Cookies from "universal-cookie";
 import {DataFactory} from "../factories/DataFactory";
 import {UserManagementInterface} from "../interfaces/UserManagementInterface";
-import {api} from "../init";
 import {BaseUserInterface} from "../interfaces/BaseUserInterface";
 import {DataClassInterface} from "../interfaces/DataClassInterface";
+import {Minimalism} from "../Minimalism";
+
+const cookies = new Cookies();
 
 export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Routes extends keyof any = keyof any> implements UserManagementInterface{
     private _token: string|undefined;
@@ -13,9 +15,10 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
     private _userData: any|undefined;
     private _user: T|undefined;
 
-    constructor() {
-        const cookies = new Cookies();
-
+    constructor(
+        private _authUrl: string,
+        private _authClientId: string,
+    ) {
         this._token = cookies.get('token');
         this._refreshToken = cookies.get('refresh_token');
         this._tokenExpires = +cookies.get('token_expires');
@@ -29,7 +32,6 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
     }
 
     logout(): void {
-        const cookies = new Cookies();
         cookies.remove('token');
         cookies.remove('refresh_token');
         cookies.remove('token_expires');
@@ -40,16 +42,15 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         if (token.access_token === undefined)
             return;
 
-        const cookies = new Cookies();
-        cookies.set("token", token.access_token);
-        cookies.set("refresh_token", token.refresh_token);
-        cookies.set("token_expires", +(token.expires * 1000));
+        cookies.set("token", token.access_token, { path: "/" });
+        cookies.set("refresh_token", token.refresh_token, { path: "/" });
+        cookies.set("token_expires", +(token.expires * 1000), { path: "/" });
     }
 
     private async _retrieveToken(
         data: any,
     ): Promise<any> {
-        const url: string = process.env.REACT_APP_AUTH_URL + "token";
+        const url: string = this._authUrl + "token";
 
         return fetch(url,{
             method: "POST",
@@ -58,15 +59,12 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
             cache: "no-cache",
         })
             .then((response: Response) => {
-                response.json()
+                return response.json()
                     .then((token: any) => {
                         this._login(token);
-
                         return;
                     })
                     .catch((error: any) => {
-                        console.log(error);
-
                         return;
                     });
             });
@@ -78,7 +76,7 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         const data: any = {
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": process.env.REACT_APP_AUTH_CLIENT_ID,
+            "client_id": this._authClientId,
         };
 
         return this._retrieveToken(data);
@@ -88,7 +86,7 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         const data: any = {
             "grant_type": "refresh_token",
             "refresh_token": this._refreshToken,
-            "client_id": process.env.REACT_APP_AUTH_CLIENT_ID,
+            "client_id": this._authClientId,
         };
 
         return this._retrieveToken(data);
@@ -113,9 +111,9 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
                 this._user = DataFactory.create(userClass, this._userData);
             } else {
                 try {
-                    this._user = await api.getSingle(userClass, "me");
+                    this._user = await Minimalism.api.getSingle(userClass, "me");
                     this._userData = this._user.data;
-                    cookies.set("user", this._userData);
+                    cookies.set("user", this._userData, { path: "/" });
                 } catch (e) {
                     console.log(e);
 
@@ -140,7 +138,10 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         return this._token;
     }
 
-    get user(): T|undefined {
+    get user(): T {
+        if (this._user === undefined)
+            throw new Error("User is not logged in");
+
         return this._user;
     }
 }

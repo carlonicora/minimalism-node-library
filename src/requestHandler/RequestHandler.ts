@@ -4,21 +4,27 @@ import {RequestHandlerInterface} from "../interfaces/RequestHandlerInterface";
 import {CacheExpiration} from "../enums/CacheExpiration";
 import {DataFactory} from "../factories/DataFactory";
 import Cookies from "universal-cookie";
-import {LinkRouter} from "../routing/LinkRouter";
 import {RoutingTypeInterface} from "../interfaces/RoutingTypeInterface";
 import {Routing} from "../routing/Routing";
 import {ApiCacheInterface} from "../interfaces/ApiCacheInterface";
 import {ApiCache} from "../cache/ApiCache";
 import {ApiCachedElementKeyInterface} from "../interfaces/ApiCachedElementKeyInterface";
+import {Minimalism} from "../Minimalism";
+import {ApiDataInterface} from "../interfaces/ApiDataInterface";
 
 export const routing = new Routing();
 
+interface jsonApiInterface {
+    data: any[] | any;
+    included: any[];
+}
+
 export class RequestHandler implements RequestHandlerInterface {
-    // private cacheManager: CacheManager;
     private _apiCache: ApiCacheInterface;
 
-    constructor() {
-        // this.cacheManager = new CacheManager();
+    constructor(
+        private _apiUrl: string,
+    ) {
         this._apiCache = new ApiCache();
     }
 
@@ -52,9 +58,9 @@ export class RequestHandler implements RequestHandlerInterface {
         const key: ApiCachedElementKeyInterface = {type: name, id: id};
 
         // const cachedDataObject = await this.cacheManager.get(url);
-        const cachedDataObject = await this._apiCache.getElement(key);
+        const cachedDataObject: ApiDataInterface|undefined = await this._apiCache.getElement(key);
         if (cachedDataObject) {
-            const cachedResponse: T = DataFactory.create(objectClass, cachedDataObject) as T;
+            const cachedResponse: T = DataFactory.create(objectClass, cachedDataObject.data, cachedDataObject.included) as T;
             await cachedResponse.load();
             return cachedResponse;
         }
@@ -66,9 +72,9 @@ export class RequestHandler implements RequestHandlerInterface {
 
         if (cache !== CacheExpiration.NoCache)
             // await this.cacheManager.set(url, jsonApi.data, this._cacheExpirationToSeconds(cache));
-            await this._apiCache.addElement({type: name, id: id}, jsonApi.data, this._cacheExpirationToSeconds(cache));
+            await this._apiCache.addElement({type: name, id: id}, jsonApi.data, this._cacheExpirationToSeconds(cache), jsonApi.included);
 
-        const response = DataFactory.create(objectClass, jsonApi.data);
+        const response: T = DataFactory.create(objectClass, jsonApi.data, jsonApi.included) as T;
         await response.load();
 
         return response;
@@ -97,7 +103,7 @@ export class RequestHandler implements RequestHandlerInterface {
         if (cachedList) {
             const cachedDataList: T[] = [];
             for (const cachedItem of cachedList) {
-                const cachedResponse: T = DataFactory.create(objectClass, cachedItem) as T;
+                const cachedResponse: T = DataFactory.create(objectClass, cachedItem.data, cachedItem.included) as T;
                 await cachedResponse.load();
                 cachedDataList.push(cachedResponse);
             }
@@ -105,10 +111,13 @@ export class RequestHandler implements RequestHandlerInterface {
         }
 
         let resultsCount = 0;
-        const fetchDataRecursively = async (url: string): Promise<any[]> => {
+        const fetchDataRecursively = async (url: string): Promise<jsonApiInterface> => {
             const jsonApi = await this._fetch(url);
 
-            let nextPageData: any[] = [];
+            let nextPageData: jsonApiInterface = {
+                data: [],
+                included: []
+            };
 
             if (
                 jsonApi.links && jsonApi.links.next &&
@@ -119,38 +128,47 @@ export class RequestHandler implements RequestHandlerInterface {
             }
 
             if (jsonApi.data === undefined)
-                return [];
+                return nextPageData ?? {data: []};
 
-            return Array.isArray(jsonApi.data) ? jsonApi.data.concat(nextPageData) : [jsonApi.data].concat(nextPageData);
+            return this._mergeJsonApiData(jsonApi, nextPageData);
         };
 
         const allData = await fetchDataRecursively(url);
-        if (allData.length === 0)
+        if (allData.data.length === 0)
             return [];
 
-        const dataList: T[] = allData.map((data: any) => {
-            const response: T = DataFactory.create(objectClass, data);
+        const dataList: T[] = allData.data.map((data: any) => {
+            const response: T = DataFactory.create(objectClass, data, allData.included) as T;
             response.load();
             return response;
         });
 
         if (cache !== undefined && cache !== CacheExpiration.NoCache) {
-            this._apiCache.addList(url, allData, this._cacheExpirationToSeconds(cache));
-
-            // const idList = dataList.map(item => item.self);
-            // await this.cacheManager.set(url, idList, this._cacheExpirationToSeconds(cache));
-            //
-            // dataList.forEach(async (item) => {
-            //     const itemJsonApi = allData.find((data: any) => data.id === item.id);
-            //     await this.cacheManager.set(
-            //         item.self,
-            //         itemJsonApi,
-            //         this._cacheExpirationToSeconds(cache as CacheExpiration)
-            //     );
-            // });
+            this._apiCache.addList(url, allData.data, this._cacheExpirationToSeconds(cache), allData.included);
         }
 
         return dataList;
+    }
+
+    private _mergeJsonApiData(
+        jsonApi1: jsonApiInterface,
+        jsonApi2: jsonApiInterface
+    ): jsonApiInterface {
+        // Concatenate data arrays
+        const data1 = Array.isArray(jsonApi1.data) ? jsonApi1.data : [jsonApi1.data];
+        const data2 = Array.isArray(jsonApi2.data) ? jsonApi2.data : [jsonApi2.data];
+        const mergedData = data1.concat(data2);
+
+        // Concatenate included arrays, if they exist
+        const included1 = jsonApi1.included || [];
+        const included2 = jsonApi2.included || [];
+        const mergedIncluded = included1.concat(included2);
+
+        // Return new JsonApiInterface object
+        return {
+            data: mergedData,
+            included: mergedIncluded,
+        };
     }
 
     async patch<T extends DataInterface>(
@@ -173,7 +191,7 @@ export class RequestHandler implements RequestHandlerInterface {
             .then((response: Response) => {
                 return response.json()
                     .then((jsonApi: any) => {
-                        return this._apiCache.addElement({type: jsonApi.data.type, id: jsonApi.data.id}, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration))
+                        return this._apiCache.addElement({type: jsonApi.data.type, id: jsonApi.data.id}, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included)
                             .then(() => {
                                 return true;
                             });
@@ -217,13 +235,12 @@ export class RequestHandler implements RequestHandlerInterface {
             .then((response: Response) => {
                 return response.json()
                     .then((jsonApi: any) => {
-                        const response: T = DataFactory.create(objectClass, jsonApi.data);
-                        // this.cacheManager.set(response.self, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration));
+                        const response: T = DataFactory.create(objectClass, jsonApi.data, jsonApi.included);
 
                         if (listUrl) {
-                            this._apiCache.addNewElementToList(listUrl, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration));
+                            this._apiCache.addNewElementToList(listUrl, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included);
                         } else {
-                            this._apiCache.addElement({type: jsonApi.data.type, id: jsonApi.data.id}, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration));
+                            this._apiCache.addElement({type: jsonApi.data.type, id: jsonApi.data.id}, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included);
                         }
 
                         return response;
@@ -240,14 +257,14 @@ export class RequestHandler implements RequestHandlerInterface {
             return endpoint;
 
         if (route !== undefined)
-            return LinkRouter.getApiEndpoint(route, id);
+            return Minimalism.linkRouter.getApiEndpoint(route, id);
 
         throw new Error("");
     }
 
     private async _fetch(url: string): Promise<any> {
         if (!url.startsWith("http"))
-            url = (process.env.REACT_APP_API_URL ?? "") + url;
+            url = this._apiUrl + url;
 
         const cookies = new Cookies();
         const bearer = cookies.get("token");

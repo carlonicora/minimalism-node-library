@@ -1,7 +1,12 @@
 import {RoutingTypeInterface} from "../interfaces/RoutingTypeInterface";
 
 export class LinkRouter {
-    static getLink(
+    constructor(
+        private _apiUrl: string,
+    ) {
+    }
+
+    getLink(
         route?: RoutingTypeInterface,
         id?: string,
         childId?: string,
@@ -18,7 +23,7 @@ export class LinkRouter {
         return this._generateUri(route.url, id, childId);
     }
 
-    static getApiEndpoint(
+    getApiEndpoint(
         route?: RoutingTypeInterface,
         id?: string,
         childId?: string,
@@ -29,7 +34,7 @@ export class LinkRouter {
         if (route.endpoint === undefined)
             throw new Error("Route not identifying of an API endpoint");
 
-        let response: string|undefined = process.env.REACT_APP_API_URL;
+        let response: string|undefined = this._apiUrl;
 
         if (response === undefined)
             throw new Error("API url not defined");
@@ -43,7 +48,7 @@ export class LinkRouter {
         return response;
     }
 
-    private static _identifyApiVersion(
+    private _identifyApiVersion(
         version?: number,
     ): string {
         if (version === undefined)
@@ -55,7 +60,7 @@ export class LinkRouter {
         return "v" + formattedNum;
     }
 
-    private static _generateUri(
+    private _generateUri(
         route: string,
         id?: string,
         childId?: string,

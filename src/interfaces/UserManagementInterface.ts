@@ -5,7 +5,7 @@ export interface UserManagementInterface<T extends BaseUserInterface = BaseUserI
     initialise(userClass: DataClassInterface<T, R>): Promise<void>;
     getToken(code: string): Promise<void>;
     get isLoggedIn(): boolean;
-    get user(): T|undefined;
+    get user(): T;
     get token(): string|undefined;
     logout(): void;
 }
