@@ -1,4 +1,5 @@
 import {DataType} from "../enums/DataType";
+import {DataClassInterface} from "./DataClassInterface";
 
 export interface DataInterface {
     load(loadChildren?: boolean) : Promise<void>
@@ -9,7 +10,8 @@ export interface DataInterface {
     get id(): string;
     get self(): string;
 
-    getRelationshipLink(type: DataType): string|undefined
+    cleanChildren<T extends DataInterface, Routes>(type?: DataClassInterface<T, Routes>,): void;
+    getRelationshipLink<T extends DataInterface, Routes>(type: DataClassInterface<T, Routes>, plural?: boolean): string|undefined
     getLink(type: string): string|undefined;
     importData(data: any, includedData?: any[]): void;
     createFormState(): any;

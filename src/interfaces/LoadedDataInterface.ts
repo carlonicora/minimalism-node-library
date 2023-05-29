@@ -1,5 +1,6 @@
 export interface LoadedDataInterface {
     isLoaded: boolean,
     data: any,
-    reloadData: () => void,
+    reloadData: (refreshCache?: boolean) => void,
+    isLoadingRelationships: boolean,
 }

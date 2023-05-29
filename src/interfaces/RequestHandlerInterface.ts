@@ -7,14 +7,16 @@ export interface RequestHandlerInterface {
         objectClass: DataClassInterface<T, Routes>,
         id: string,
         endpoint?: string,
-        cache?: CacheExpiration
+        cache?: CacheExpiration,
+        skipCache?: boolean,
     ): Promise<T>;
 
     getList<T extends DataInterface, Routes>(
         objectClass: DataClassInterface<T, Routes>,
         endpoint?: string,
         cache?: CacheExpiration,
-        maxResults?: number
+        maxResults?: number,
+        params?: Map<string,string>,
     ): Promise<T[]>;
 
     getListFromUrl<T extends DataInterface>(
@@ -27,6 +29,11 @@ export interface RequestHandlerInterface {
     patch<T extends DataInterface>(
         objectClass: DataClassInterface<T, any>,
         jsonApi: any,
+    ): Promise<boolean>;
+
+    delete<T extends DataInterface>(
+        objectClass: DataClassInterface<T, any>,
+        id: string,
     ): Promise<boolean>;
 
     post<T extends DataInterface>(

@@ -1,5 +1,4 @@
 import {DataType} from "../enums/DataType";
-// import {ApiCaller} from "../api/ApiCaller";
 import {DataInterface} from "../interfaces/DataInterface";
 import {DataClassInterface} from "../interfaces/DataClassInterface";
 import {CacheExpiration} from "../enums/CacheExpiration";
@@ -26,6 +25,53 @@ export abstract class AbstractData implements DataInterface{
         this._included = includedData;
         this._type = data.type;
         this._id = data.id;
+    }
+
+    protected _addIncluded<T extends DataInterface, Routes>(
+        type: DataClassInterface<T, Routes>,
+        name: string,
+        isSingle: boolean = false,
+    ): void {
+        if (this._data.relationships[name] !== undefined) {
+            const items = Array.isArray(this._data.relationships[name].data) ? this._data.relationships[name].data : [this._data.relationships[name].data];
+
+            const resourceObjects = items.map((item: any) => {
+                if (item === undefined)
+                    return undefined;
+
+                const includedItem = (this._included || []).find((includedElement: any) => includedElement.type === item.type && includedElement.id === item.id);
+
+                if (includedItem) {
+                    const resourceObject = new type(includedItem.id);
+                    resourceObject.importData(includedItem, this._included);
+                    return resourceObject;
+                }
+
+                return undefined;
+            });
+
+            const allItems = resourceObjects.filter((item: any|undefined) => item !== undefined);
+
+            if (allItems.length !== 0){
+                if (isSingle){
+                    this._children.set(type, allItems[0]);
+                } else {
+                    this._children.set(type, allItems);
+                }
+            } else {
+                if (!isSingle){
+                    this._children.set(type, []);
+                }
+            }
+        }
+    }
+
+    cleanChildren<T extends DataInterface, Routes>(type?: DataClassInterface<T, Routes>,): void {
+        if (type === undefined)
+            this._children.clear();
+        else
+            this._children.delete(type);
+
     }
 
     async load(
@@ -136,10 +182,18 @@ export abstract class AbstractData implements DataInterface{
         return this._data?.links[type];
     }
 
-    getRelationshipLink(
-        type: DataType
+    getRelationshipLink<T extends DataInterface, Routes>(
+        type: DataClassInterface<T, Routes>,
+        plural?: boolean,
     ): string|undefined {
-        return this?._data?.relationships[type]?.links?.related;
+        let name = type.name.toLowerCase();
+        if (name[0] === "_")
+            name = name.substr(1);
+
+        if (plural)
+            name = Pluraliser.plural(name);
+
+        return this?._data?.relationships[name]?.links?.related;
     }
 
     protected async _getRelatedSingle<T extends DataInterface, Routes>(

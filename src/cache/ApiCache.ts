@@ -8,14 +8,16 @@ export class ApiCache implements ApiCacheInterface {
     private _dbPromise: Promise<IDBDatabase>;
     private _objectStoreNames: string[] = ['lists', 'elements', 'indexes'];
 
-    constructor() {
+    constructor(
+        private _applicationName: string,
+    ) {
         this._dbPromise = this._openDatabase('lists');
     }
 
     private _openDatabase(objectStore: string): Promise<IDBDatabase> {
         if (typeof window !== "undefined") {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('only35', 1);
+                const request = indexedDB.open(this._applicationName, 1);
 
                 request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
                     const db = (event.target as IDBOpenDBRequest).result;

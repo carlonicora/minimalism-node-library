@@ -16,11 +16,12 @@ export class Minimalism {
         apiUrl: string,
         authUrl: string,
         authClientId: string,
+        applicationName: string,
     ): void {
-        Minimalism._api = new RequestHandler(apiUrl);
+        Minimalism._api = new RequestHandler(apiUrl, applicationName);
         Minimalism._userManager = new UserManagement(authUrl, authClientId);
         Minimalism._linkRouter = new LinkRouter(apiUrl);
-        Minimalism._cache = new ApiCache();
+        Minimalism._cache = new ApiCache(applicationName);
 
         Minimalism._authUrl = authUrl + "auth/index?client_id=" + authClientId + "&state=";
     }

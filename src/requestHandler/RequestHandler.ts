@@ -24,8 +24,9 @@ export class RequestHandler implements RequestHandlerInterface {
 
     constructor(
         private _apiUrl: string,
+        private _applicationName: string,
     ) {
-        this._apiCache = new ApiCache();
+        this._apiCache = new ApiCache(_applicationName);
     }
 
     private _cacheExpirationToSeconds(expiration: CacheExpiration): number {
@@ -46,7 +47,8 @@ export class RequestHandler implements RequestHandlerInterface {
         objectClass: DataClassInterface<T, Routes>,
         id: string,
         endpoint?: string,
-        cache?: CacheExpiration
+        cache?: CacheExpiration,
+        skipCache?: boolean,
     ): Promise<T> {
         const url = this._generateUrl(routing.get(+objectClass.route), endpoint, id);
         cache = cache ?? objectClass.cacheExpiration;
@@ -57,12 +59,13 @@ export class RequestHandler implements RequestHandlerInterface {
 
         const key: ApiCachedElementKeyInterface = {type: name, id: id};
 
-        // const cachedDataObject = await this.cacheManager.get(url);
-        const cachedDataObject: ApiDataInterface|undefined = await this._apiCache.getElement(key);
-        if (cachedDataObject) {
-            const cachedResponse: T = DataFactory.create(objectClass, cachedDataObject.data, cachedDataObject.included) as T;
-            await cachedResponse.load();
-            return cachedResponse;
+        if (!skipCache || skipCache === undefined) {
+            const cachedDataObject: ApiDataInterface | undefined = await this._apiCache.getElement(key);
+            if (cachedDataObject) {
+                const cachedResponse: T = DataFactory.create(objectClass, cachedDataObject.data, cachedDataObject.included) as T;
+                await cachedResponse.load();
+                return cachedResponse;
+            }
         }
 
         const jsonApi = await this._fetch(url);
@@ -84,9 +87,10 @@ export class RequestHandler implements RequestHandlerInterface {
         objectClass: DataClassInterface<T, Routes>,
         endpoint?: string,
         cache?: CacheExpiration,
-        maxResults?: number
+        maxResults?: number,
+        params?: Map<string,string>,
     ): Promise<T[]> {
-        const url = this._generateUrl(routing.get(+objectClass.route), endpoint);
+        const url = this._generateUrl(routing.get(+objectClass.route), endpoint, undefined, params);
 
         return this.getListFromUrl(objectClass, url, cache, maxResults);
     }
@@ -191,10 +195,16 @@ export class RequestHandler implements RequestHandlerInterface {
             .then((response: Response) => {
                 return response.json()
                     .then((jsonApi: any) => {
-                        return this._apiCache.addElement({type: jsonApi.data.type, id: jsonApi.data.id}, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included)
+                        return this._apiCache.removeElement({type: jsonApi.data.type, id: jsonApi.data.id})
                             .then(() => {
-                                return true;
-                            });
+                                return this._apiCache.addElement({
+                                    type: jsonApi.data.type,
+                                    id: jsonApi.data.id
+                                }, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included)
+                                    .then(() => {
+                                        return true;
+                                    });
+                                });
                     }).catch((reason: any) => {
                         return false;
                     });
@@ -202,6 +212,40 @@ export class RequestHandler implements RequestHandlerInterface {
             .catch((reason: any) => {
                 console.log(reason);
                 return false;
+            });
+    }
+
+    async delete<T extends DataInterface>(
+        objectClass: DataClassInterface<T, any>,
+        id: string,
+    ): Promise<boolean> {
+        const url = this._generateUrl(routing.get(+objectClass.route), undefined, id);
+
+        const cookies = new Cookies();
+        const bearer = cookies.get("token");
+        const requestInit: RequestInit = {};
+        const headersInit: HeadersInit = {};
+        headersInit.Authorization = "Bearer " + bearer;
+        requestInit.headers = headersInit;
+        requestInit.cache = "no-cache";
+        requestInit.method = "DELETE";
+
+        return fetch(url, requestInit)
+            .then((response: Response) => {
+                if (!response.ok)
+                    return false;
+
+                let name = objectClass.name.toLowerCase();
+                if (name.startsWith("_"))
+                    name = name.substr(1);
+
+                if (objectClass.cacheExpiration === CacheExpiration.NoCache)
+                    return true;
+
+                return this._apiCache.removeElement({type: name, id: id})
+                    .then(() => {
+                        return true;
+                    });
             });
     }
 
@@ -252,14 +296,25 @@ export class RequestHandler implements RequestHandlerInterface {
         route?: RoutingTypeInterface,
         endpoint?: string,
         id?: string,
+        params?: Map<string, string>,
     ): string {
         if (endpoint !== undefined)
             return endpoint;
 
-        if (route !== undefined)
-            return Minimalism.linkRouter.getApiEndpoint(route, id);
+        if (route === undefined)
+            throw new Error("");
 
-        throw new Error("");
+        let response = Minimalism.linkRouter.getApiEndpoint(route, id);
+
+        if (params !== undefined) {
+            response += "?";
+            params.forEach((value: string, key: string) => {
+                response += key + "=" + value + "&";
+            });
+            response = response.substr(0, response.length - 1);
+        }
+
+        return response;
     }
 
     private async _fetch(url: string): Promise<any> {

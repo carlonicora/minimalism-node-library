@@ -3,6 +3,7 @@ import {BaseUserInterface} from "../interfaces/BaseUserInterface";
 import {DataClassInterface} from "../interfaces/DataClassInterface";
 import {BaseRoutes} from "../enums/BaseRoutes";
 import {CacheExpiration} from "../enums/CacheExpiration";
+import {DataInterface} from "../interfaces/DataInterface";
 
 class _BaseUser extends AbstractData implements BaseUserInterface {
     private _email: string | undefined;

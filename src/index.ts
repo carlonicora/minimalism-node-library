@@ -11,6 +11,9 @@ export * from "./enums/CacheExpiration";
 
 export * from "./factories/DataFactory";
 
+export * from "./hooks/useDataLoader";
+export * from "./hooks/useListLoader";
+
 export * from "./interfaces/ApiCachedElementKeyInterface";
 export * from "./interfaces/ApiCacheElementInterface";
 export * from "./interfaces/ApiCacheInterface";
