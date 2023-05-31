@@ -9,6 +9,8 @@ export * from "./enums/BaseRoutes";
 export * from "./enums/DataType";
 export * from "./enums/CacheExpiration";
 
+export * from "./errors/HTTPError";
+
 export * from "./factories/DataFactory";
 
 export * from "./hooks/useDataLoader";

@@ -137,6 +137,9 @@ export class ApiCache implements ApiCacheInterface {
         const listKeys: string[] | undefined = await indexCache.get(key);
 
         if (listKeys) {
+            // Remove the indexes+type for the element.
+            await indexCache.delete(key);
+
             for (const listKey of listKeys) {
                 const listCache: ApiCacheElementInterface = await this._getCacheElement("lists");
                 const elementKeys: ApiCachedElementKeyInterface[] | undefined = await listCache.get({ id: listKey, type: 'lists' });
@@ -146,9 +149,6 @@ export class ApiCache implements ApiCacheInterface {
                     await listCache.set({ id: listKey, type: 'lists' }, updatedElementKeys, 0);
                 }
             }
-
-            // Remove the indexes+type for the element.
-            await indexCache.delete(key);
         }
 
         // Remove the element itself.

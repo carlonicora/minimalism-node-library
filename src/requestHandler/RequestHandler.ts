@@ -11,6 +11,7 @@ import {ApiCache} from "../cache/ApiCache";
 import {ApiCachedElementKeyInterface} from "../interfaces/ApiCachedElementKeyInterface";
 import {Minimalism} from "../Minimalism";
 import {ApiDataInterface} from "../interfaces/ApiDataInterface";
+import {HTTPError} from "../errors/HTTPError";
 
 export const routing = new Routing();
 
@@ -277,6 +278,9 @@ export class RequestHandler implements RequestHandlerInterface {
 
         return fetch(url, requestInit)
             .then((response: Response) => {
+                if (!response.ok)
+                    throw new HTTPError('HTTP error', response.status);
+
                 return response.json()
                     .then((jsonApi: any) => {
                         const response: T = DataFactory.create(objectClass, jsonApi.data, jsonApi.included);
