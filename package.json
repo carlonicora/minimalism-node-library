@@ -1,6 +1,6 @@
 {
   "name": "minimalism-node-library",
-  "version": "1.0.60",
+  "version": "1.0.70",
   "description": " A library that support the minimalism framework for APIs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
