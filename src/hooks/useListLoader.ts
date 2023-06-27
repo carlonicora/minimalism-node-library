@@ -30,6 +30,7 @@ export function useListLoader<T extends DataInterface, Routes>(
     run: boolean,
     searchParams?: Map<string, string>,
     maxResults?: number,
+    endpoint?: string,
 ): LoadedDataInterface {
     const [isLoaded, setIsLoaded] = useState(false);
     const [data, setData] = useState<T[]>([]);
@@ -44,7 +45,7 @@ export function useListLoader<T extends DataInterface, Routes>(
 
     useEffect(() => {
         async function fetchData() {
-            const data = await Minimalism.api.getList(objectClass, undefined, undefined, maxResults ?? 10, searchParams);
+            const data = await Minimalism.api.getList(objectClass, endpoint, undefined, maxResults ?? 10, searchParams);
             setIsLoaded(true);
             setData(data);
             setUsedSearchParams(searchParams);
@@ -56,7 +57,7 @@ export function useListLoader<T extends DataInterface, Routes>(
         if (!isLoaded && run) {
             fetchData();
         }
-    }, [objectClass, run, searchParams, maxResults]);
+    }, [objectClass, run, searchParams, maxResults, endpoint]);
 
     return {isLoaded, data, reloadData, isLoadingRelationships};
 }
