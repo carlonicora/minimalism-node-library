@@ -6,6 +6,7 @@ export interface UserManagementInterface<T extends BaseUserInterface = BaseUserI
     getToken(code: string): Promise<void>;
     get isLoggedIn(): boolean;
     get user(): T;
+    set user(value: T);
     get token(): string|undefined;
     logout(): void;
 }
