@@ -1,5 +1,5 @@
-import { DataClassInterface } from "../interfaces/DataClassInterface";
-import { DataInterface } from "../interfaces/DataInterface";
+import {DataClassInterface} from "../interfaces/DataClassInterface";
+import {DataInterface} from "../interfaces/DataInterface";
 import {RequestHandlerInterface} from "../interfaces/RequestHandlerInterface";
 import {CacheExpiration} from "../enums/CacheExpiration";
 import {DataFactory} from "../factories/DataFactory";
@@ -104,15 +104,17 @@ export class RequestHandler implements RequestHandlerInterface {
     ): Promise<T[]> {
         cache = cache ?? objectClass.cacheExpiration;
 
-        const cachedList = await this._apiCache.getList(url);
-        if (cachedList) {
-            const cachedDataList: T[] = [];
-            for (const cachedItem of cachedList) {
-                const cachedResponse: T = DataFactory.create(objectClass, cachedItem.data, cachedItem.included) as T;
-                await cachedResponse.load();
-                cachedDataList.push(cachedResponse);
+        if (cache !== CacheExpiration.NoCache) {
+            const cachedList = await this._apiCache.getList(url);
+            if (cachedList) {
+                const cachedDataList: T[] = [];
+                for (const cachedItem of cachedList) {
+                    const cachedResponse: T = DataFactory.create(objectClass, cachedItem.data, cachedItem.included) as T;
+                    await cachedResponse.load();
+                    cachedDataList.push(cachedResponse);
+                }
+                return cachedDataList;
             }
-            return cachedDataList;
         }
 
         let resultsCount = 0;
@@ -176,80 +178,6 @@ export class RequestHandler implements RequestHandlerInterface {
         };
     }
 
-    async patch<T extends DataInterface>(
-        objectClass: DataClassInterface<T, any>,
-        jsonApi: any,
-    ): Promise<boolean> {
-        const url = this._generateUrl(routing.get(+objectClass.route),undefined, jsonApi.data.id);
-
-        const cookies = new Cookies();
-        const bearer = cookies.get("token");
-        const requestInit: RequestInit = {};
-        const headersInit: HeadersInit = {};
-        headersInit.Authorization = "Bearer " + bearer;
-        requestInit.headers = headersInit;
-        requestInit.cache = "no-cache";
-        requestInit.method = "PATCH";
-        requestInit.body = JSON.stringify(jsonApi);
-
-        return fetch(url, requestInit)
-            .then((response: Response) => {
-                return response.json()
-                    .then((jsonApi: any) => {
-                        return this._apiCache.removeElement({type: jsonApi.data.type, id: jsonApi.data.id})
-                            .then(() => {
-                                return this._apiCache.addElement({
-                                    type: jsonApi.data.type,
-                                    id: jsonApi.data.id
-                                }, jsonApi.data, this._cacheExpirationToSeconds(objectClass.cacheExpiration), jsonApi.included)
-                                    .then(() => {
-                                        return true;
-                                    });
-                                });
-                    }).catch((reason: any) => {
-                        return false;
-                    });
-            })
-            .catch((reason: any) => {
-                console.log(reason);
-                return false;
-            });
-    }
-
-    async delete<T extends DataInterface>(
-        objectClass: DataClassInterface<T, any>,
-        id: string,
-    ): Promise<boolean> {
-        const url = this._generateUrl(routing.get(+objectClass.route), undefined, id);
-
-        const cookies = new Cookies();
-        const bearer = cookies.get("token");
-        const requestInit: RequestInit = {};
-        const headersInit: HeadersInit = {};
-        headersInit.Authorization = "Bearer " + bearer;
-        requestInit.headers = headersInit;
-        requestInit.cache = "no-cache";
-        requestInit.method = "DELETE";
-
-        return fetch(url, requestInit)
-            .then((response: Response) => {
-                if (!response.ok)
-                    return false;
-
-                let name = objectClass.name.toLowerCase();
-                if (name.startsWith("_"))
-                    name = name.substr(1);
-
-                if (objectClass.cacheExpiration === CacheExpiration.NoCache)
-                    return true;
-
-                return this._apiCache.removeElement({type: name, id: id})
-                    .then(() => {
-                        return true;
-                    });
-            });
-    }
-
     async post<T extends DataInterface>(
         objectClass: DataClassInterface<T, any>,
         jsonApi: any,
@@ -258,14 +186,43 @@ export class RequestHandler implements RequestHandlerInterface {
     ): Promise<T> {
         const url = this._generateUrl(routing.get(+objectClass.route));
 
+        return this._postOrPatch("POST", url, objectClass, jsonApi, file, listUrl);
+    }
+
+    async patch<T extends DataInterface>(
+        objectClass: DataClassInterface<T, any>,
+        jsonApi: any,
+        file?: File,
+        listUrl?: string,
+    ): Promise<T> {
+        const url = this._generateUrl(routing.get(+objectClass.route),undefined, jsonApi.data.id);
+        return this._postOrPatch("PATCH", url, objectClass, jsonApi, file, listUrl);
+    }
+
+    private _generateRequestInit(
+        method: string
+    ): RequestInit {
         const cookies = new Cookies();
         const bearer = cookies.get("token");
-        const requestInit: RequestInit = {};
+        const response: RequestInit = {};
         const headersInit: HeadersInit = {};
         headersInit.Authorization = "Bearer " + bearer;
-        requestInit.headers = headersInit;
-        requestInit.cache = "no-cache";
-        requestInit.method = "POST";
+        response.headers = headersInit;
+        response.cache = "no-cache";
+        response.method = method;
+
+        return response;
+    }
+
+    private async _postOrPatch<T extends DataInterface>(
+        method: string,
+        url: string,
+        objectClass: DataClassInterface<T, any>,
+        jsonApi: any,
+        file?: File,
+        listUrl?: string,
+    ): Promise<T> {
+        const requestInit = this._generateRequestInit(method);
 
         if (file) {
             const formData = new FormData();
@@ -296,19 +253,56 @@ export class RequestHandler implements RequestHandlerInterface {
             });
     }
 
+    async delete<T extends DataInterface>(
+        objectClass: DataClassInterface<T, any>,
+        id: string,
+    ): Promise<boolean> {
+        const url = this._generateUrl(routing.get(+objectClass.route), undefined, id);
+
+        const requestInit = this._generateRequestInit("DELETE");
+
+        return fetch(url, requestInit)
+            .then((response: Response) => {
+                if (!response.ok)
+                    return false;
+
+                let name = objectClass.name.toLowerCase();
+                if (name.startsWith("_"))
+                    name = name.substr(1);
+
+                if (objectClass.cacheExpiration === CacheExpiration.NoCache)
+                    return true;
+
+                return this._apiCache.removeElement({type: name, id: id})
+                    .then(() => {
+                        return true;
+                    });
+            });
+    }
+
     private _generateUrl(
         route?: RoutingTypeInterface,
         endpoint?: string,
         id?: string,
         params?: Map<string, string>,
     ): string {
-        if (endpoint !== undefined)
-            return endpoint;
+        if (endpoint !== undefined) {
+            return this._addParams(endpoint, params);
+        }
 
         if (route === undefined)
             throw new Error("");
 
         let response = Minimalism.linkRouter.getApiEndpoint(route, id);
+
+        return this._addParams(response, params);
+    }
+
+    private _addParams(
+        endpoint: string,
+        params?: Map<string, string>,
+    ): string {
+        let response = endpoint;
 
         if (params !== undefined) {
             response += "?";

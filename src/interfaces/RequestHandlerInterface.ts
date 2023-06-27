@@ -29,7 +29,9 @@ export interface RequestHandlerInterface {
     patch<T extends DataInterface>(
         objectClass: DataClassInterface<T, any>,
         jsonApi: any,
-    ): Promise<boolean>;
+        file?: File,
+        listUrl?: string,
+    ): Promise<T>;
 
     delete<T extends DataInterface>(
         objectClass: DataClassInterface<T, any>,
