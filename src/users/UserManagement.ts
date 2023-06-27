@@ -42,9 +42,15 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         if (token.access_token === undefined)
             return;
 
-        cookies.set("token", token.access_token, { path: "/" });
-        cookies.set("refresh_token", token.refresh_token, { path: "/" });
-        cookies.set("token_expires", +(token.expires * 1000), { path: "/" });
+        const durationInSeconds = 365 * 24 * 60 * 60;
+        const options = {
+            path: "/",
+            maxAge: durationInSeconds,
+            expires: new Date(Date.now() + durationInSeconds * 1000),
+        };
+        cookies.set("token", token.access_token,  options);
+        cookies.set("refresh_token", token.refresh_token, options);
+        cookies.set("token_expires", +(token.expires * 1000), options);
     }
 
     private async _retrieveToken(
@@ -96,7 +102,6 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         const cookies = new Cookies();
 
         if (this._token !== undefined) {
-
             if (this._tokenExpires !== undefined){
                 const tokenExpirationTimeUTC = new Date(this._tokenExpires);
                 const now = new Date();
@@ -128,6 +133,12 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         if (this._user !== undefined)
             await this._user.load();
 
+    }
+
+    set user(value: T) {
+        this._user = value;
+        this._userData = this._user.data;
+        cookies.set("user", this._userData, { path: "/" });
     }
 
     get isLoggedIn(): boolean {
