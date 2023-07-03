@@ -200,23 +200,23 @@ export abstract class AbstractData implements DataInterface{
         className: DataClassInterface<T, Routes>,
         cache?: CacheExpiration,
     ): Promise<T>{
-        let name = className.name.toLowerCase();
+        let name = className.className.toLowerCase();
         if (name[0] === "_")
             name = name.substr(1);
 
         if (this._data.relationships[name] === undefined)
-            throw new Error(className.name + ' missing');
+            throw new Error(className.className + ' missing');
 
         const url: string|undefined = this._data.relationships[name].links.related;
 
         if (url === undefined)
-            throw new Error(className.name + ' missing');
+            throw new Error(className.className + ' missing');
 
         // const response = await this._api.getSingle(className, undefined, url, cache ?? className.cacheExpiration);
         const response: T = await Minimalism.api.getSingle(className, url.split('/').pop() ?? "", url, cache ?? className.cacheExpiration);
 
         if (response === undefined)
-            throw new Error(className.name + ' missing');
+            throw new Error(className.className + ' missing');
 
         return response;
     }
@@ -226,14 +226,14 @@ export abstract class AbstractData implements DataInterface{
         cache?: CacheExpiration,
         maxResults?: number
     ): Promise<T[]> {
-        let name = className.name.toLowerCase();
+        let name = className.className.toLowerCase();
         if (name[0] === "_")
             name = name.substr(1);
 
         const url: string|undefined = this._data.relationships[Pluraliser.plural(name)].links.related;
 
         if (url === undefined)
-            throw new Error(Pluraliser.plural(className.name) + ' missing');
+            throw new Error(Pluraliser.plural(className.className) + ' missing');
 
         return Minimalism.api.getList(className, url, cache ?? className.cacheExpiration, maxResults);
     }

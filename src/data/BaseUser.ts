@@ -21,6 +21,7 @@ class _BaseUser extends AbstractData implements BaseUserInterface {
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const BaseUser: DataClassInterface<BaseUserInterface, BaseRoutes> = Object.assign(_BaseUser, {
+    className: "User",
     cacheExpiration: CacheExpiration.NoCache,
     route: BaseRoutes.user,
 });

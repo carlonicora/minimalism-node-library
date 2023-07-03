@@ -36,6 +36,11 @@ export class UserManagement<T extends BaseUserInterface = BaseUserInterface, Rou
         cookies.remove('refresh_token');
         cookies.remove('token_expires');
         cookies.remove('user');
+        this._token = undefined;
+        this._refreshToken = undefined;
+        this._tokenExpires = undefined;
+        this._userData = undefined;
+        this._user = undefined;
     }
 
     private _login(token: any): void {
